@@ -1,4 +1,5 @@
 from aiogram import F, Router
+from aiogram.enums.parse_mode import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
@@ -7,7 +8,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
 from cart.cart import Cart
 from db.config import get_connection
 from db.repository import RawSQLRepository
-from utils import are_keyboards_equal
+from utils import are_keyboards_equal, escape_markdown_v2
 
 ITEMS_PER_PAGE = 6
 
@@ -141,9 +142,10 @@ async def product_detail_handler(callback: CallbackQuery, state: FSMContext):
         kb.append([InlineKeyboardButton(text='Добавить в корзину', callback_data=f'product-cart_add_{product_id}')])
     builder = InlineKeyboardBuilder(kb)
 
+    description = escape_markdown_v2(product.description)
     caption = (
-        f'Название(id): {product.name}\n'
-        f'Описание: {product.description}\n'
+        f'Название: {product.name}\n'
+        f'Описание: {description}\n'
         f'Стоимость: {str(product.price)} руб.\n'
     )
 
@@ -151,7 +153,8 @@ async def product_detail_handler(callback: CallbackQuery, state: FSMContext):
         callback.message.chat.id,
         product.image,
         caption=caption,
-        reply_markup=builder.as_markup()
+        reply_markup=builder.as_markup(),
+        parse_mode=ParseMode.MARKDOWN_V2,
     )
     await callback.answer()
 

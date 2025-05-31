@@ -1,0 +1,63 @@
+name: bottec
+
+
+networks:
+  bot_net:
+    name: bottec_bot_net
+  admin_net:
+    name: bottec_admin_net
+
+services:
+  bot:
+    container_name: bottec_bot
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    env_file:
+      - ./bot/.env
+    networks:
+      - bot_net
+    command: ["python", "./src/main.py"]
+    depends_on:
+      db:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+    restart: unless-stopped
+  admin:
+    container_name: bottec_admin
+    build:
+      context: ./admin_panel
+      dockerfile: Dockerfile
+    env_file:
+      - ./admin_panel/.env
+    networks:
+      - admin_net
+    command: ["./init.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -If localhost:8000/ping"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 15s
+    ports:
+      - 8000:8000
+  db:
+    container_name: bottec_db
+    image: postgres:17.5-bookworm
+    restart: always
+    shm_size: 128mb
+    env_file:
+      - ./.env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    networks:
+      - admin_net
+      - bot_net

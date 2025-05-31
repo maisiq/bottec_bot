@@ -1,6 +1,5 @@
 import datetime as dt
 import logging
-import re
 
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -9,11 +8,7 @@ from config import bot
 from db.config import get_connection
 from db.models import Promo
 from db.repository import RawSQLRepository
-
-
-def escape_markdown_v2(text: str) -> str:
-    """Экранирование зарезервированных символов для MarkdownV2."""
-    return re.sub(r'\.', r'\\.', text)
+from utils import escape_markdown_v2
 
 
 async def notify_user(user_id, promo: Promo):

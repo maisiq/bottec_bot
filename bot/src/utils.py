@@ -1,4 +1,5 @@
 import os
+import re
 
 from openpyxl import Workbook, load_workbook
 
@@ -58,3 +59,8 @@ def are_keyboards_equal(current_keyboard, new_keyboard):
             if (btn_current.text != btn_new.text or btn_current.callback_data != btn_new.callback_data):
                 return False
     return True
+
+
+def escape_markdown_v2(text: str) -> str:
+    """Экранирование зарезервированных символов для MarkdownV2."""
+    return re.sub(r'\.', r'\\.', text)

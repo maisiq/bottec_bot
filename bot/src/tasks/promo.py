@@ -13,8 +13,7 @@ from db.repository import RawSQLRepository
 
 def escape_markdown_v2(text: str) -> str:
     """Экранирование зарезервированных символов для MarkdownV2."""
-    reserved_chars = r'([()\[\]\{\}\.<>!#+-=|])'
-    return re.sub(reserved_chars, r'\\\1', text)
+    return re.sub(r'\.', r'\\.', text)
 
 
 async def notify_user(user_id, promo: Promo):

@@ -22,7 +22,8 @@ class Cart:
         else:
             self.__cart[product_id] = {'name': product.name, 'price': str(product.price), 'quantity': quantity}
 
-    def decrease(self, product_id: str):
+    def decrease(self, product: Product):
+        product_id = str(product.id)
         if product_id in self.__cart:
             quantity = self.__cart[product_id]['quantity']
             if quantity <= 1:
@@ -30,7 +31,8 @@ class Cart:
             else:
                 self.__cart[product_id]['quantity'] -= 1
 
-    def delete(self, product_id: str) -> None:
+    def delete(self, product: Product) -> None:
+        product_id = str(product.id)
         if product_id in self.__cart:
             del self.__cart[product_id]
 

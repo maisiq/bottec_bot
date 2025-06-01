@@ -16,6 +16,7 @@ multidict==6.4.4
 propcache==0.3.1
 psycopg==3.2.9
 psycopg-binary==3.2.9 ; implementation_name != 'pypy'
+psycopg-pool==3.2.6
 pydantic==2.11.5
 pydantic-core==2.33.2
 python-decouple==3.8

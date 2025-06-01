@@ -10,7 +10,6 @@ from db.config import get_connection
 from db.repository import RawSQLRepository
 from utils import are_keyboards_equal, escape_markdown_v2
 
-ITEMS_PER_PAGE = 6
 
 router = Router()
 
@@ -39,24 +38,18 @@ async def get_items_by_state(data: dict, cur_state: State):
     return items
 
 
-async def display_page(
-    message: Message | CallbackQuery,
-    state: FSMContext,
-    display_text: str = 'Выберите:',
-):
+async def get_paginated_builder(state: FSMContext, page: int, items_per_page: int = 6):
     data = await state.get_data()
-    page = data.get('page', 0)
     cur_state = await state.get_state()
     data_type = cur_state.split(':')[1]
 
     items = await get_items_by_state(data, cur_state)
 
     if not items:
-        await message.answer('К сожалению, там пока ничего нет')
         return
 
-    start = page * ITEMS_PER_PAGE
-    end = start + ITEMS_PER_PAGE
+    start = page * items_per_page
+    end = start + items_per_page
     show_items = items[start:end]
 
     builder = InlineKeyboardBuilder()
@@ -81,37 +74,36 @@ async def display_page(
     adjust_items = [2] * int(len(items) / 2)  # [n] columns * number of rows
     builder.adjust(*adjust_items, 1, 2)
 
-    if isinstance(message, CallbackQuery):
-        await message.message.edit_text(display_text, reply_markup=builder.as_markup())
-        await message.answer()
-    else:
-        await message.answer(display_text, reply_markup=builder.as_markup())
+    return builder
 
 
-@router.callback_query(F.data == "prev_page")
-async def prev_page(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data.in_(['prev_page', 'next_page']))
+async def switch_page(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    await state.update_data(page=data["page"] - 1)
-    await display_page(callback, state)
+    if callback.data == 'prev_page':
+        page = data['page'] - 1
+    elif callback.data == 'next_page':
+        page = data['page'] + 1
 
+    await state.update_data(page=page)
+    builder = await get_paginated_builder(state, page)
 
-@router.callback_query(F.data == "next_page")
-async def next_page(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    await state.update_data(page=data["page"] + 1)
-    await display_page(callback, state)
+    await callback.message.edit_reply_markup(callback.inline_message_id, reply_markup=builder.as_markup())
+    await callback.answer()
 
 
 # Handlers
 
 @router.message(F.text.lower() == 'каталог')
-async def catalog_handler(
-    message: Message,
-    state: FSMContext,
-) -> None:
+async def catalog_handler(message: Message, state: FSMContext) -> None:
     await state.set_state(PaginationState.category)
-    await state.update_data(page=0)
-    await display_page(message, state)
+    page = 0
+
+    if builder := await get_paginated_builder(state, page):
+        await state.update_data(page=page)
+        await message.answer('Выберите категорию:', reply_markup=builder.as_markup())
+    else:
+        await message.answer('Тут пока ничего нет 😢')
 
 
 def get_product_in_cart_nav_keyboard(product_id, cart):
@@ -126,7 +118,6 @@ def get_product_in_cart_nav_keyboard(product_id, cart):
 
 @router.callback_query(F.data.startswith("product_"))
 async def product_detail_handler(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(PaginationState.product)
     cart = await Cart().init(state)
     product_id = callback.data.split("_")[1]
 
@@ -142,12 +133,12 @@ async def product_detail_handler(callback: CallbackQuery, state: FSMContext):
         kb.append([InlineKeyboardButton(text='Добавить в корзину', callback_data=f'product-cart_add_{product_id}')])
     builder = InlineKeyboardBuilder(kb)
 
-    description = escape_markdown_v2(product.description)
-    caption = (
+    base_caption = (
         f'Название: {product.name}\n'
-        f'Описание: {description}\n'
+        f'Описание: {product.description}\n'
         f'Стоимость: {str(product.price)} руб.\n'
     )
+    caption = escape_markdown_v2(base_caption)
 
     await callback.message.bot.send_photo(
         callback.message.chat.id,
@@ -164,8 +155,16 @@ async def products(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(PaginationState.product)
 
     _, subcategory = callback.data.split('_')
-    await state.update_data(page=0, subcategory=subcategory)
-    await display_page(callback, state)
+    await state.update_data(subcategory=subcategory)
+    page = 0
+
+    if builder := await get_paginated_builder(state, page):
+        await callback.message.edit_text('Выберите товар:', reply_markup=builder.as_markup())
+        await state.update_data(page=page)
+        await callback.answer()
+    else:
+        await callback.answer('К сожалению, там пока ничего нет')
+        await state.set_state(PaginationState.subcategory)
 
 
 @router.callback_query(F.data.startswith("category_"))
@@ -173,14 +172,21 @@ async def subcategories(callback: CallbackQuery, state: FSMContext) -> None:
     _, category = callback.data.split('_')
 
     await state.set_state(PaginationState.subcategory)
-    await state.update_data(page=0, category=category)
-    await display_page(callback, state)
+    await state.update_data(category=category)
+    page = 0
+
+    if builder := await get_paginated_builder(state, page):
+        await callback.message.edit_text('Выберите подкатегорию:', reply_markup=builder.as_markup())
+        await state.update_data(page=page)
+        await callback.answer()
+    else:
+        await callback.answer('К сожалению, там пока ничего нет')
+        await state.set_state(PaginationState.category)
 
 
 @router.callback_query(F.data.startswith("product-cart"))
 async def cart_handler(callback: CallbackQuery, state: FSMContext):
     _, action, product_id = callback.data.split("_")
-
     cart = await Cart().init(state)
 
     async with get_connection() as conn:
@@ -222,6 +228,10 @@ async def product_info_handler(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == 'catalog')
 async def categories_on_return_button(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.update_data(page=0)
+    page = 0
+    await state.update_data(page=page)
     await state.set_state(PaginationState.category)
-    await display_page(callback, state)
+
+    builder = await get_paginated_builder(state, page)
+    await callback.message.edit_text('Выберите категорию:', reply_markup=builder.as_markup())
+    await callback.answer()

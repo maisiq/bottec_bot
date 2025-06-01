@@ -6,6 +6,10 @@ networks:
     name: bottec_bot_net
   admin_net:
     name: bottec_admin_net
+  
+configs:
+  nginx_conf:
+    file: ./nginx/nginx.conf
 
 services:
   bot:
@@ -43,8 +47,6 @@ services:
       timeout: 30s
       retries: 5
       start_period: 15s
-    ports:
-      - 8000:8000
   db:
     container_name: bottec_db
     image: postgres:17.5-bookworm
@@ -61,3 +63,20 @@ services:
     networks:
       - admin_net
       - bot_net
+  nginx:
+    container_name: bottec_nginx
+    image: nginx:1.27.5
+    restart: always
+    volumes:
+      - ./admin_panel/staticfiles/:/var/www/admin/static/
+    configs:
+      - source: nginx_conf
+        target: /etc/nginx/nginx.conf
+        mode: 0440
+    ports:
+      - 80:80
+    networks:
+      - admin_net
+    depends_on:
+      admin:
+        condition: service_healthy

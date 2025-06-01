@@ -2,15 +2,14 @@ import asyncio
 import logging
 import sys
 
-from aiogram import Dispatcher
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 from aiogram.utils.keyboard import KeyboardButton, ReplyKeyboardBuilder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from cart.router import router as cart_router
-from config import bot
-from db.config import get_connection
+from config import bot, dp
+from db.config import get_connection, init_pool
 from db.repository import RawSQLRepository
 from faq.router import router as faq_router
 from logs.config import setup_logger
@@ -18,8 +17,6 @@ from products.router import router as product_router
 from tasks.promo import promote
 
 SUBSCRIBE_TO = []
-
-dp = Dispatcher()
 
 
 async def check_subscription(channel_id: int, user_id: int) -> bool:
@@ -55,12 +52,26 @@ async def command_start_handler(message: Message) -> None:
     )
 
 
+async def on_startup():
+    pool = await init_pool()
+    await pool.open()
+    dp['pool'] = pool
+
+
+async def on_shutdown():
+    pool = dp['pool']
+    await pool.close()
+
+
 async def main() -> None:
     setup_logger()
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(promote, 'interval', minutes=1,)
     scheduler.start()
+
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
 
     dp.include_router(product_router)
     dp.include_router(cart_router)

@@ -3,7 +3,7 @@ from os import getenv
 
 from psycopg_pool import AsyncConnectionPool
 
-from config import dp
+from .repository import RawSQLRepository
 
 POSTGRES_CONNINFO = getenv('POSTGRES_CONNINFO')
 
@@ -22,7 +22,8 @@ async def init_pool():
 
 
 @asynccontextmanager
-async def get_connection():
-    pool: AsyncConnectionPool = dp['pool']
+async def get_repository(pool: AsyncConnectionPool):
+    await pool.open()
     async with pool.connection() as conn:
-        yield conn
+        repo = RawSQLRepository(conn)
+        yield repo

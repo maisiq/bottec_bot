@@ -1,13 +1,14 @@
 import datetime as dt
 import logging
+from typing import AsyncContextManager
 
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from dependency_injector.wiring import Provide, inject
 
-from config import bot
-from db.config import get_connection
+from config import bot, Container
 from db.models import Promo
-from db.repository import RawSQLRepository
+from db.repository import Repository
 from utils import escape_markdown_v2
 
 
@@ -28,11 +29,11 @@ async def notify_user(user_id, promo: Promo):
         logging.error(str(e))
 
 
-async def promote():
+@inject
+async def promote(repository: AsyncContextManager[Repository] = Provide[Container.repository]):
     cur_time = dt.datetime.now(dt.UTC)
 
-    async with get_connection() as conn:
-        repo = RawSQLRepository(conn)
+    async with repository as repo:
         promo = await repo.get_active_promo(cur_time)
 
         if not promo:

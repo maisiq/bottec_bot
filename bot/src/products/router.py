@@ -1,13 +1,16 @@
+from typing import AsyncContextManager
+
 from aiogram import F, Router
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
+from dependency_injector.wiring import Provide, inject
 
 from cart.cart import Cart
-from db.config import get_connection
-from db.repository import RawSQLRepository
+from config import Container
+from db.repository import Repository
 from utils import are_keyboards_equal, escape_markdown_v2
 
 
@@ -22,10 +25,14 @@ class PaginationState(StatesGroup):
     product = State()
 
 
-async def get_items_by_state(data: dict, cur_state: State):
+@inject
+async def get_items_by_state(
+    data: dict,
+    cur_state: State,
+    repository: AsyncContextManager[Repository] = Provide[Container.repository],
+):
     items = []
-    async with get_connection() as conn:
-        repo = RawSQLRepository(conn)
+    async with repository as repo:
         match cur_state:
             case PaginationState.category:
                 items = await repo.get_categories()
@@ -117,12 +124,16 @@ def get_product_in_cart_nav_keyboard(product_id, cart):
 
 
 @router.callback_query(F.data.startswith("product_"))
-async def product_detail_handler(callback: CallbackQuery, state: FSMContext):
+@inject
+async def product_detail_handler(
+    callback: CallbackQuery,
+    state: FSMContext,
+    repository: AsyncContextManager[Repository] = Provide[Container.repository],
+):
     cart = await Cart().init(state)
     product_id = callback.data.split("_")[1]
 
-    async with get_connection() as conn:
-        repo = RawSQLRepository(conn)
+    async with repository as repo:
         product = await repo.get_product_by_id(product_id)
 
     kb = []
@@ -185,12 +196,16 @@ async def subcategories(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data.startswith("product-cart"))
-async def cart_handler(callback: CallbackQuery, state: FSMContext):
+@inject
+async def cart_handler(
+    callback: CallbackQuery,
+    state: FSMContext,
+    repository: AsyncContextManager[Repository] = Provide[Container.repository],
+):
     _, action, product_id = callback.data.split("_")
     cart = await Cart().init(state)
 
-    async with get_connection() as conn:
-        repo = RawSQLRepository(conn)
+    async with repository as repo:
         product = await repo.get_product_by_id(product_id)
 
     match action:
